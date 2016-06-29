@@ -1,0 +1,224 @@
+Sub Pivot_Report()
+Call SwitchOff
+'Worksheets
+    Set DropAccount = Worksheets("DROP ACCOUNT REPORT HERE")
+    Set Database = Worksheets("Database")
+    Set RMMF = Worksheets("RMMF SHEET")
+    Set DropPivot = Worksheets("DROP PIVOT REPORT HERE")
+    Set PivotReport = Worksheets("PIVOT TABLE")
+
+Dim pt As PivotTable
+    
+Call Database_Update
+Call DropPivot_Update
+Call RMMF_Update
+Call SaveDown
+
+With PivotReport
+'refresh pivot table
+    For Each pt In .PivotTables
+        pt.RefreshTable
+    Next pt
+End With
+
+Call SwitchOn
+
+PivotReport.Range("A1").Select
+MsgBox ("Macro is complete")
+End Sub
+
+
+ Sub Database_Update()
+ Call SwitchOff
+ 
+ Dim NewISIN As Integer
+ 
+ 'Worksheets
+    Set DropAccount = Worksheets("DROP ACCOUNT REPORT HERE")
+    Set Database = Worksheets("Database")
+    
+ With Database
+ LR = .Cells(.Rows.Count, "A").End(xlUp).Row
+ End With
+    
+ With DropAccount
+ 'last used row
+ LastRow = .Cells(.Rows.Count, "CB").End(xlUp).Row
+ 'loop
+     For n = 2 To LastRow
+     'if there is an ISIN
+     If .Range("CZ" & n) <> "" Then
+        'if the ISIN is missing from the database
+        If Application.IsError(Application.Match(.Range("CZ" & n), Database.Range("A2:A" & LR), 0)) Then
+            Database.Range("A" & Database.Rows.Count).End(xlUp).Offset(1, 0) = .Range("CZ" & n).Value    'add ISIN absent in the database
+        End If
+    End If
+    Next n
+End With
+
+With Database
+ 'last used row
+ LastRow = .Cells(.Rows.Count, "A").End(xlUp).Row
+ 'loop
+     For n = 2 To LastRow
+    'if a new ISIN has been added to the database
+    If .Range("A" & n) <> "" And .Range("B" & n) = "" Then
+    'if there is a new isin, NewISIN will be greater than one. tell the user that the macro has been suspended and to update the database
+        MsgBox ("Macro Suspended. New ISIN(s) added to the Database" & vbNewLine & "Follow the same naming convention as per other assets in the list")
+        'Ends Macro
+        End
+    End If
+    Next n
+End With
+
+Call SwitchOn
+End Sub
+ 
+Sub DropPivot_Update()
+Call SwitchOff
+
+Dim EndRow As Integer
+Dim Characters As Integer
+'Worksheets
+    Set DropAccount = Worksheets("DROP ACCOUNT REPORT HERE")
+    Set Database = Worksheets("Database")
+    Set DropPivot = Worksheets("DROP PIVOT REPORT HERE")
+    
+With DropAccount
+ LR = .Cells(.Rows.Count, "CB").End(xlUp).Row
+ End With
+ 
+ With Database
+ EndRow = .Cells(.Rows.Count, "A").End(xlUp).Row
+ End With
+    
+With DropPivot
+ 'last used row
+ LastRow = .Cells(.Rows.Count, "F").End(xlUp).Row
+    For n = 2 To LastRow
+        If Application.Index(DropAccount.Range("CZ2:CZ" & LR), Application.Match(.Range("F" & n), DropAccount.Range("CB2:CB" & LR), 0), 1) = "" Then
+            .Range("E" & n).Value = Application.Index(DropAccount.Range("AR2:AR" & LR), Application.Match(.Range("F" & n), DropAccount.Range("CB2:CB" & LR), 0), 1)
+        Else
+            .Range("E" & n).Value = Application.Index(DropAccount.Range("CZ2:CZ" & LR), Application.Match(.Range("F" & n), DropAccount.Range("CB2:CB" & LR), 0), 1)
+        End If
+    Next n
+    
+    For n = 2 To LastRow
+    Characters = Len(.Range("E" & n))
+    If Characters = 12 Then
+        .Range("A" & n).Value = Application.Index(Database.Range("B2:B" & EndRow), Application.Match(.Range("E" & n), Database.Range("A2:A" & EndRow), 0), 1)
+        .Range("B" & n).Value = Application.Index(Database.Range("C2:C" & EndRow), Application.Match(.Range("E" & n), Database.Range("A2:A" & EndRow), 0), 1)
+        .Range("C" & n).Value = Application.Index(Database.Range("D2:D" & EndRow), Application.Match(.Range("E" & n), Database.Range("A2:A" & EndRow), 0), 1)
+        .Range("D" & n).Value = Application.Index(Database.Range("E2:E" & EndRow), Application.Match(.Range("E" & n), Database.Range("A2:A" & EndRow), 0), 1)
+    ElseIf .Range("E" & n).Value = "CURR" Then
+        .Range("A" & n, "D" & n).Value = "CASH"
+    ElseIf InStr(UCase(.Range("F" & n).Text), "OPTION") <> 0 Then
+        .Range("A" & n, "D" & n).Value = "OPTION"
+    ElseIf InStr(UCase(.Range("F" & n).Text), "BLUEBAY") <> 0 Then
+        .Range("A" & n).Value = "CONVERTIBLES"
+        .Range("B" & n).Value = "GLOBAL"
+        .Range("C" & n).Value = "GLOBAL HIGH YIELD"
+        .Range("D" & n).Value = "FIXED INCOME"
+    ElseIf InStr(UCase(.Range("F" & n).Text), "AMUNDI") <> 0 Then
+        .Range("A" & n).Value = "CASH PLUS"
+        .Range("B" & n).Value = "CASH PLUS"
+        .Range("C" & n).Value = "GLOBAL NON-DIRECTIONAL HEDGE FUNDS"
+        .Range("D" & n).Value = "HEDGE FUND"
+    ElseIf InStr(UCase(.Range("F" & n).Text), "GLOBAL DEFENSIVE EQUITY") <> 0 Then
+        .Range("A" & n).Value = "EQUITY"
+        .Range("B" & n).Value = "GLOBAL"
+        .Range("C" & n).Value = "GLOBAL EQUITIES"
+        .Range("D" & n).Value = "EQUITY"
+    ElseIf .Range("E" & n).Value = "SEGF" Then
+        .Range("A" & n).Value = "EQUITY"
+        .Range("B" & n).Value = "US"
+        .Range("C" & n).Value = "US EQUITIES"
+        .Range("D" & n).Value = "EQUITY"
+    ElseIf InStr(UCase(.Range("F" & n).Text), "FUTURE") <> 0 Then
+        .Range("A" & n).Value = Application.VLookup(.Range("F" & n), Database.Range("H1:L" & EndRow), 2, False)
+        .Range("B" & n).Value = Application.VLookup(.Range("F" & n), Database.Range("H1:L" & EndRow), 3, False)
+        .Range("C" & n).Value = Application.VLookup(.Range("F" & n), Database.Range("H1:L" & EndRow), 4, False)
+        .Range("D" & n).Value = Application.VLookup(.Range("F" & n), Database.Range("H1:L" & EndRow), 5, False)
+    ElseIf .Range("E" & n) = "COM" Then
+        .Range("A" & n, "D" & n).Value = "OPTION"
+    End If
+    Next n
+End With
+
+Call SwitchOn
+End Sub
+
+Sub RMMF_Update()
+Call SwitchOff
+
+'Worksheets
+Set RMMF = Worksheets("RMMF SHEET")
+Set DropAccount = Worksheets("DROP ACCOUNT REPORT HERE")
+Set Database = Worksheets("Database")
+
+With DropAccount
+ 'last used row
+ LastRow = .Cells(.Rows.Count, "F").End(xlUp).Row
+    .Columns("J:L").Style = "Comma"
+End With
+
+With RMMF
+
+    'BBH
+        .Range("C2:C" & LastRow).Value = DropAccount.Range("F2:F" & LastRow).Value
+    'Security Name
+        .Range("D2:D" & LastRow).Value = DropAccount.Range("CB2:CB" & LastRow).Value
+    'Ticker
+        .Range("E2:E" & LastRow).Value = DropAccount.Range("BW2:BW" & LastRow).Value
+    'Currency
+        .Range("G2:G" & LastRow).Value = DropAccount.Range("AW2:AW" & LastRow).Value
+    'FX
+        .Range("H2:H" & LastRow).Value = DropAccount.Range("N2:N" & LastRow).Value
+    'Price
+        .Range("I2:I" & LastRow).Value = DropAccount.Range("AQ2:AQ" & LastRow).Value
+    'BOD QTY
+        .Range("J2:J" & LastRow).Value = DropAccount.Range("G2:G" & LastRow).Value
+    'Open QTY
+        .Range("K2:K" & LastRow).Value = DropAccount.Range("J2:J" & LastRow).Value
+    'Cash Adj
+        .Range("L2:M" & LastRow).Value = DropAccount.Range("K2:L" & LastRow).Value
+    'Total Value
+        .Range("N2:N" & LastRow).Value = DropAccount.Range("AF2:AF" & LastRow).Value
+    'Current%
+        .Range("P2:P" & LastRow).Value = DropAccount.Range("Y2:Y" & LastRow).Value
+    'Target%
+        .Range("Q2:Q" & LastRow).Value = DropAccount.Range("AC2:AC" & LastRow).Value
+    'Total+/-%
+        .Range("S2:S" & LastRow).Value = DropAccount.Range("OK2:OK" & LastRow).Value
+    'New%
+        .Range("T2:T" & LastRow).Value = DropAccount.Range("AG2:AG" & LastRow).Value
+        
+    For n = 2 To LastRow
+     'column F
+        If .Range("E" & n).Value = "INVREC" Or Range("E" & n) = "INTREC" Or Range("E" & n) = "CASH" Or Range("E" & n) = "INVPAY" Or Range("E" & n) = "UNREGL" Then
+            .Range("F" & n).Value = 1
+            Else: .Range("F" & n).Value = 0
+        End If
+        
+    'column A
+        .Range("A" & n).Value = .Range("C" & n) & .Range("F" & n)
+    'column B
+        .Range("B" & n).Value = .Range("C" & n) & .Range("E" & n)
+    
+    'breach?
+        If .Range("F" & n).Value = "1" Then
+            .Range("U" & n).Value = "Not Applicable"
+            ElseIf .Range("R" & n).Value = .Range("S" & n) Then
+                .Range("U" & n) = "YES"
+            Else: .Range("U" & n) = "NO"
+        End If
+    'a/c
+        .Range("V" & n).Value = Application.IfError(Application.Index(Database.Columns("O"), Application.Match(.Range("C" & n), Database.Columns("N"), 0)), "")
+        
+    Next n
+End With
+
+
+Call SwitchOn
+End Sub
+ 
