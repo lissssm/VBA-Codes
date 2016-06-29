@@ -1,0 +1,83 @@
+Sub SaveDown()
+'saves down the file
+
+'Worksheets
+    Set ControlSheet = ThisWorkbook.Worksheets("CONTROL SHEET")
+    
+'Declarations
+    Dim sBasePath As String
+    Dim sFilename As String
+    Dim sMonth As String
+    Dim sPath As String
+    Dim sYear As String
+    Dim MessageBox
+       
+'untick checklist checkboxes (user to complete these when dropping files)
+    ControlSheet.CheckBoxes.Value = xlOff
+
+'specify file name (FoF Recontiliation and date macro is run in long format and file extension is xlsm)
+    sFilename = "FoF Reconciliation " & Format(Now(), "dd mmmm yyyy") & ".xlsm"
+    
+'specify base path where file will be saved (if any of the folders or any part of the path is changed, the path to the FoF Reconciliation will need to be updated else the macro will break)
+    sBasePath = "\\FRCLON_FS-A\LON_NET\TCM\Lon-RIS-PIT\FOF Reconciliation\"
+
+    If Right(sBasePath, 1) <> "\" Then sBasePath = sBasePath & "\" 'Check for "\" at the end of the base path
+    
+    sYear = Year(Now) 'Set this year
+    sPath = sBasePath & sYear & "\" 'update path to include year
+    
+    'Create directory if folder for the year does not exist
+        If Dir(sPath, vbDirectory) = vbNullString Then
+            MkDir sPath
+        End If
+    
+    'formatting dates for folder names
+        If Len(Month(Now)) = 1 Then
+            sMonth = "0" & Month(Now) 'Add leading zero for months Jan - September which have 1 integer
+        Else
+            sMonth = Month(Now)
+        End If
+    
+    sMonth = sMonth & " " & MonthName(Month(Now), True) 'Set month as number + short month name(3 characters)
+    sPath = sPath & sMonth & "\" 'update base path to include month
+    
+    'Create directory if folder for the month does not exist
+        If Dir(sPath, vbDirectory) = vbNullString Then
+            MkDir sPath
+        End If
+    
+    
+'check if a file name with the same name exists
+    If Len(Dir(sPath & sFilename)) = 0 Then
+    
+    'if file name does not exist, save the file in the specified path (sPath) with the specified name (sFileName)
+        ThisWorkbook.SaveAs sPath & sFilename
+    
+    'else if file name exists then
+        ElseIf Len(Dir(sPath & sFilename)) > 0 Then
+    
+        'Inform the user that the file already exists and check if the user wants to overwrite or save under a new name
+            MessageBox = MsgBox("File already exists. Do you want to replace it?", vbYesNo, "File Name")
+        
+            'If the answer is Yes
+                If MessageBox = vbYes Then
+                
+                'overwrite the file
+                    Application.DisplayAlerts = False
+                        thisworkbookWorkbook.SaveAs sPath & sFilename
+                    Application.DisplayAlerts = True
+                
+            'elseif the answer is No
+                ElseIf MessageBox = vbNo Then
+            
+                'trigger then save as dialogue box to give user option to change file name to desired name
+                    Application.ExecuteExcel4Macro ("SAVE.AS?()")
+                
+                End If
+        
+    End If
+    
+'keep relevant t-minus 1 data
+Call Tminus1Data
+
+End Sub
