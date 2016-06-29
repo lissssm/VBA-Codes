@@ -1,0 +1,67 @@
+Sub CopyValues(rngSource As Range, rngTarget As Range)
+ 
+    rngTarget.Resize(rngSource.Rows.Count, rngSource.Columns.Count).Value = rngSource.Value
+ 
+End Sub
+    
+Sub SwitchOff()
+    With Application
+    'Tells Excel to not redraw the screen so not to use up resources as screen changes faster than the user can perceive and it requires lots of resources to draw the screen so frequently
+        .ScreenUpdating = False
+    'Tells Excel to stop showing status
+        .DisplayStatusBar = False
+    'Programmatically set Excel’s calculation mode to “Manual” meaning Excel waits for the user (or code) to explicitly initiate calculation.
+    '“Automatic” is the default and Excel recalculate workbook everytime a cell changes
+        .Calculation = xlCalculationManual
+    'Tells Excel to not fire events
+        .EnableEvents = False
+    'Set to False to suppress prompts and alert messages while a macro is running; when a message requires a response, Microsoft Excel chooses the default response.
+        .DisplayAlerts = False
+    End With
+End Sub
+ 
+Sub SwitchOn()
+'applications turned off in sub SwitchOff to optimise macro are restored to their default values
+    With Application
+        .ScreenUpdating = True
+        .DisplayStatusBar = True
+        .Calculation = xlCalculationAutomatic
+        .EnableEvents = True
+        .DisplayAlerts = True
+    End With
+End Sub
+Public Function DeleteAllBlankRowsInColumn(ByVal columnLetter As String)
+
+        'Delete all blank rows in column specified (suppress errors just in case there aren't any blank cells)
+        On Error Resume Next
+
+            Columns(columnLetter).SpecialCells(xlCellTypeBlanks).EntireRow.Delete
+
+        'Set error handling back to normal
+        On Error GoTo 0
+
+End Function
+
+Public Function FindNextEmpty(ByVal rcell As Range) As Range
+'Finds the first empty cell downwards in a column.
+
+On Error GoTo ErrorHandle
+
+With rcell
+   'If the start cell is empty it is the first empty cell.
+   If Len(.Formula) = 0 Then
+      Set FindNextEmpty = rcell
+      'If the cell just below is empty
+   ElseIf Len(.Offset(1, 0).Formula) = 0 Then
+      Set FindNextEmpty = .Offset(1, 0)
+   Else
+      'Finds the last cell with content.
+      '.End(xlDown) = pressing CTRL + arrow down.
+      Set FindNextEmpty = .End(xlDown).Offset(1, 0)
+   End If
+End With
+
+Exit Function
+ErrorHandle:
+MsgBox Err.Description & ", Function FindNextEmpty."
+End Function
