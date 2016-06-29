@@ -1,0 +1,110 @@
+Sub EMail_Sheets_Array()
+'Works in Excel 2000-2013
+    Dim FileFormatNum As Long
+    Dim Sourcewb, Destwb, ThisBook As Workbook
+    Set ThisBook = ThisWorkbook
+    Dim TempFilePath, TempFileName, FileExtStr As String
+    Dim OutApp, OutMail As Object
+    Dim sh, WkSht As Worksheet
+    Dim TheActiveWindow, TempWindow As Window
+    Dim shp As Shape
+    Dim link As Variant
+    Dim rng As Range
+    
+    With Application
+        .ScreenUpdating = False
+        .DisplayStatusBar = False
+        .Calculation = xlCalculationManual
+        .EnableEvents = False
+    End With
+
+    Set Sourcewb = ActiveWorkbook
+
+    'Copy the sheets to a new workbook
+    'add a temporary Window to avoid copy problems
+    With Sourcewb
+        Set TheActiveWindow = ActiveWindow
+        Set TempWindow = .NewWindow
+        .Sheets(Array("PIVOT TABLE", "DROP PIVOT REPORT HERE", "RMMF SHEET", "OPTION REWEIGHTING", "Asset Allocation Table")).Copy
+    End With
+
+    'Close temporary Window
+    TempWindow.Close
+
+    Set Destwb = ActiveWorkbook
+
+    With Destwb
+        'break all links to source workbook
+        If Not IsEmpty(ThisBook.LinkSources(xlExcelLinks)) Then
+        For Each link In ThisBook.LinkSources(xlExcelLinks)
+        ThisBook.BreakLink link, xlLinkTypeExcelLinks
+        Next link
+        End If
+        
+        'delete macro button and reformat pivot table sheet
+        With Sheets("PIVOT TABLE")
+        'delete macro button
+        For Each shp In .Shapes
+            shp.Delete
+        Next shp
+        .Rows("1:5").Delete Shift:=xlUp   'delete unwanted rows and shift pivot table up
+        End With
+        
+'        'Determine the Excel version and file extension/format
+'        If Val(Application.Version) < 12 Then
+'            'Excel 97-2003
+'            FileExtStr = ".xls": FileFormatNum = -4143
+'        Else
+'            'Excel 2007-2013
+'            Select Case Sourcewb.FileFormat
+'            Case 51: FileExtStr = ".xlsx": FileFormatNum = 51
+'            Case 52:
+'                If .HasVBProject Then
+'                    FileExtStr = ".xlsm": FileFormatNum = 52
+'                Else
+'                    FileExtStr = ".xlsx": FileFormatNum = 51
+'                End If
+'            Case 56: FileExtStr = ".xls": FileFormatNum = 56
+'            Case Else: FileExtStr = ".xlsb": FileFormatNum = 50
+'            End Select
+'        End If
+'
+        'Save the light workbook/close it
+        TempFilePath = Environ$("temp") & "\"
+        TempFileName = "EOD SNAPSHOT " & _
+            Format(Now(), "dd mmmm yyyy") & ".xls"
+        .SaveAs TempFilePath & TempFileName
+        Workbooks(TempFileName).Close
+        
+    End With
+
+'return to original file/ send email with light version attached/ delete light file
+ThisWorkbook.Activate
+    Set OutApp = CreateObject("Outlook.Application")
+    Set OutMail = OutApp.CreateItem(0)
+        
+        With OutMail
+            .To = Worksheets("PIVOT TABLE").Range("N1")
+            .CC = Worksheets("PIVOT TABLE").Range("N2")
+            .BCC = Worksheets("PIVOT TABLE").Range("N3")
+            .Subject = Worksheets("PIVOT TABLE").Range("N4")
+'            .Body = Worksheets("PIVOT TABLE").Range("B8")
+            .Attachments.Add (TempFilePath & TempFileName)
+            .Display
+'            .Send
+        End With
+
+
+    'Delete the light file sent
+    Kill TempFilePath & TempFileName
+
+    Set OutMail = Nothing
+    Set OutApp = Nothing
+
+    With Application
+        .ScreenUpdating = True
+        .DisplayStatusBar = True
+        .Calculation = xlCalculationAutomatic
+        .EnableEvents = True
+    End With
+End Sub
