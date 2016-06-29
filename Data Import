@@ -1,0 +1,540 @@
+Sub ImportALL()
+'PURPOSE: To loop through all Excel files in L:\TCM\Lon-RIS-PIT\FOF Reconciliation and perform a set task on them
+
+'Declarations
+    Dim StartTime As Double
+    Dim SecondsElapsed As Double
+
+'Remember time when macro starts
+    StartTime = Timer
+  
+'turns off unnessarily applications to ensure macro runs fast
+    Call SwitchOff
+
+'Worksheets
+    Set BBHData = ThisWorkbook.Worksheets("BBH Data")
+    Set ControlSheet = ThisWorkbook.Worksheets("CONTROL SHEET")
+    Set Database = ThisWorkbook.Worksheets("DATABASE")
+    Set CustodianData = ThisWorkbook.Worksheets("Custodian Data")
+    Set Blotter = ThisWorkbook.Worksheets("Blotter")
+    Set Cash_Reconciliation = ThisWorkbook.Worksheets("Cash Reconciliation")
+    
+'Declarations
+    Dim AssetIdentifier, myPath, myFile, myExtension As String
+    Dim wb, wbk As Workbook
+    Dim rng As Range
+    Dim r As Integer
+    Dim lCount As Long
+    
+'clear old data
+    BBHData.Rows("2:" & Rows.Count).ClearContents                  'BBH Worksheet
+    CustodianData.Rows("2:" & Rows.Count).ClearContents            'Custodian Worksheet
+    Cash_Reconciliation.Range("C5:Z43").ClearContents              'Cash Rec Sheet
+    
+'target folder path
+    myPath = "\\FRCLON_FS-A\LON_NET\TCM\Lon-RIS-PIT\FOF Reconciliation\"
+    
+'Dir gets the first file of the folder
+    myFile = Dir(myPath)
+
+
+'Loop through all files in a folder until DIR cannot find anymore
+    Do While myFile <> vbNullString
+                        
+        '1. Import BBH Data
+        If myFile = "FOFREC2_email_.csv" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+
+            'Copy and paste data
+            Call CopyValues(.Range("A2:I" & Cells(.Rows.Count, "A").End(xlUp).Row), BBHData.Range("I2"))
+
+        End With
+
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+    
+        '2. Import Blotter Data
+        ElseIf myFile = "Blotter.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+        
+            'Copy and paste data
+            Call CopyValues(.Range("A2:AJ" & Cells(.Rows.Count, "D").End(xlUp).Row), Blotter.Range("B" & Blotter.Cells(Blotter.Rows.Count, "E").End(xlUp).Row + 1))
+       
+        End With
+        
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+            
+        'clean up the blotter data
+        Call BlotterUpdate
+    
+        '3. Import State Street Position Data
+        ElseIf myFile = "SS FOF Positions.xls" Or myFile = "SS ICVC Positions.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+            
+            'number of cells with data in column A in the state street file
+            LastRow = .Cells(.Rows.Count, "A").End(xlUp).Row
+                
+            'generating ISIN based on Asset ID
+            For n = 2 To LastRow
+    
+                AssetIdentifier = Right(.Range("K" & n), Len(.Range("K" & n)) - 1)    'Asset Identifier minus the apostrophe (') at the start
+                    
+               'perform a v-lookup using the asset ID as the lookup code and looking for corresponding ISIN
+                    .Range("K" & n).Value = Application.IfError(Application.Index(Database.Range("L:L"), _
+                    (Application.match(.Range("K" & n), Database.Range("K:K"), 0))), AssetIdentifier)
+            Next n
+            
+            'calculate the next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'Copy and paste data
+                'entity name
+                Call CopyValues(.Range("B2:B" & LastRow), CustodianData.Range("I" & LR))
+                'custodian code and security name
+                Application.Union(.Range("A2:A" & LastRow), .Range("L2:L" & LastRow)).Copy
+                CustodianData.Range("J" & LR).PasteSpecial Paste:=xlPasteValues
+                'asset class
+                Call CopyValues(.Range("L2:L" & LastRow), CustodianData.Range("L" & LR))
+                'ISIN,quantity, Local MV
+                Application.Union(.Range("K2:K" & LastRow), .Range("R2:R" & LastRow), .Range("W2:W" & LastRow)).Copy
+                CustodianData.Range("M" & LR).PasteSpecial Paste:=xlPasteValues
+                'Local Ccy and Base MV
+                Application.Union(.Range("H2:H" & LastRow), .Range("AC2:AC" & LastRow)).Copy
+                CustodianData.Range("P" & LR).PasteSpecial Paste:=xlPasteValues
+                'clear clipboard
+                Application.CutCopyMode = False
+            
+        End With
+            
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+    
+        '4. Import Northern Trust Data
+        ElseIf myFile = "Northern Trust.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+            
+            'number of cells with data in column B
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+        
+            'ensure all local currency codes are in column o
+            For n = 2 To LastRow
+                If .Range("O" & n).Value = "*CS" Then
+                    .Range("O" & n).Value = .Range("P" & n).Value
+                Else
+                End If
+            Next n
+        
+            'calculate next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'copy data
+                'entity name, custodian code and security name
+                Application.Union(.Range("A2:B" & LastRow), .Range("W2:W" & LastRow)).Copy
+                CustodianData.Range("I" & LR).PasteSpecial Paste:=xlPasteValues
+                'asset class, ISIN
+                Application.Union(.Range("T2:T" & LastRow), .Range("AE2:AE" & LastRow)).Copy
+                CustodianData.Range("L" & LR).PasteSpecial Paste:=xlPasteValues
+                'quantity
+                Call CopyValues(.Range("M2:M" & LastRow), CustodianData.Range("N" & LR))
+                'Local MV, Local Ccy
+                Application.Union(.Range("E2:E" & LastRow), .Range("O2:O" & LastRow)).Copy
+                CustodianData.Range("O" & LR).PasteSpecial Paste:=xlPasteValues
+                'Base MV
+                Call CopyValues(.Range("F2:F" & LastRow), CustodianData.Range("Q" & LR))
+                'clear clipboard
+                Application.CutCopyMode = False
+                
+        End With
+        'close the file and don't save changes
+            wb.Close SaveChanges:=False
+        
+        '5. Import Caceis Data
+        ElseIf myFile = "Caceis Holdings Report.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+            
+            'number of cells with data in column B
+            FirstRow = 2
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+            
+        
+            'delete any securities which are not Medicis,IBM, CdN or Eparinter looping from last row until second row (bottom to top)
+            For n = LastRow To FirstRow Step -1
+                If Application.IsNumber(Application.match(.Range("C" & n), Database.Range("G:G"), 0)) = False Then
+                    .Rows(n).EntireRow.Delete
+                
+                Else
+                
+                End If
+            Next n
+        
+        
+            'recalculate number of cells with data in column B
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+            
+            'calculate next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'copy data
+                'entity name
+                Call CopyValues(.Range("D2:D" & LastRow), CustodianData.Range("I" & LR))
+                'custodian code and security name
+                Application.Union(.Range("C2:C" & LastRow), .Range("I2:I" & LastRow)).Copy
+                CustodianData.Range("J" & LR).PasteSpecial Paste:=xlPasteValues
+                'ISIN
+                Call CopyValues(.Range("F2:F" & LastRow), CustodianData.Range("M" & LR))
+                'Quantity, Local MV
+                Application.Union(.Range("S2:S" & LastRow), .Range("AB2:AB" & LastRow)).Copy
+                CustodianData.Range("N" & LR).PasteSpecial Paste:=xlPasteValues
+                'Local Ccy, Base Market Value
+                Application.Union(.Range("AA2:AA" & LastRow), .Range("AD2:AD" & LastRow)).Copy
+                CustodianData.Range("P" & LR).PasteSpecial Paste:=xlPasteValues
+                'clear clipboard
+                Application.CutCopyMode = False
+                                
+         End With
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+                
+        '6. Import Sec Gen Data
+        ElseIf myFile = "Soc Gen Holdings Report.csv" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+            
+            'calculate number of cells with data in column B
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+            
+            'calculate next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'copy data
+                'entity name
+                Call CopyValues(.Range("B2:B" & LastRow), CustodianData.Range("I" & LR))
+                'custodian code and security name
+                Application.Union(.Range("A2:A" & LastRow), .Range("H2:H" & LastRow)).Copy
+                CustodianData.Range("J" & LR).PasteSpecial Paste:=xlPasteValues
+                'asset class, ISIN
+                Application.Union(.Range("F2:F" & LastRow), .Range("BM2:BM" & LastRow)).Copy
+                CustodianData.Range("L" & LR).PasteSpecial Paste:=xlPasteValues
+                'quantity, local market value
+                Application.Union(.Range("I2:I" & LastRow), .Range("AE2:AE" & LastRow)).Copy
+                CustodianData.Range("N" & LR).PasteSpecial Paste:=xlPasteValues
+                'local ccy, base market value
+                Application.Union(.Range("N2:N" & LastRow), .Range("P2:P" & LastRow)).Copy
+                CustodianData.Range("P" & LR).PasteSpecial Paste:=xlPasteValues
+                'clear clipboard
+                Application.CutCopyMode = False
+                    
+        End With
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+        
+        '7. Import Pictet Data
+        ElseIf myFile = "Pictet Holdings report.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+            
+            'calculate number of cells with data in cloumn B
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+            
+            'Fix ISIN
+            For n = 2 To LastRow
+            
+                If Len(.Range("AA" & n)) = 12 Then
+                    .Range("AA" & n).Value = .Range("AA" & n).Value
+                Else
+                    .Range("AA" & n).Value = vbNullString
+                End If
+            
+            Next n
+            
+            'calculate next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'copy data
+                'custodian code, security name, asset class
+                Application.Union(.Range("B2:B" & LastRow), .Range("F2:F" & LastRow), .Range("AG2:AG" & LastRow)).Copy
+                CustodianData.Range("J" & LR).PasteSpecial Paste:=xlPasteValues
+                'ISIN
+                Call CopyValues(.Range("AA2:AA" & LastRow), CustodianData.Range("M" & LR))
+                'quantity, local MV
+                Application.Union(.Range("E2:E" & LastRow), .Range("M2:M" & LastRow)).Copy
+                CustodianData.Range("N" & LR).PasteSpecial Paste:=xlPasteValues
+                'local ccy, base MV
+                Application.Union(.Range("K2:K" & LastRow), .Range("S2:S" & LastRow)).Copy
+                CustodianData.Range("P" & LR).PasteSpecial Paste:=xlPasteValues
+                'clear clipboard
+                Application.CutCopyMode = False
+                           
+         End With
+         
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+                
+        '8. Import Anima Data
+        ElseIf myFile = "Anima Positions.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+            
+            'Clean Up data by deleting entire row if cell in column N is empty
+            .Columns("N").SpecialCells(xlBlanks).EntireRow.Delete
+        
+            'calculate number of cells with data in column B
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+            
+            'calculate next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'copy data
+                'entity name
+                Call CopyValues(.Range("C2:C" & LastRow), CustodianData.Range("I" & LR))
+                'custodian code, security name
+                Application.Union(.Range("B2:B" & LastRow), .Range("F2:F" & LastRow)).Copy
+                CustodianData.Range("J" & LR).PasteSpecial Paste:=xlPasteValues
+                'ISIN, quantity, local MV, local ccy, base MV
+                Application.Union(.Range("E2:E" & LastRow), .Range("G2:G" & LastRow), .Range("K2:M" & LastRow)).Copy
+                CustodianData.Range("M" & LR).PasteSpecial Paste:=xlPasteValues
+                'clear clipboard
+                Application.CutCopyMode = False
+            
+         End With
+         
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+        
+        '9. Import Duemme Data
+        ElseIf myFile = "Duemme Positions.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+                
+            'calculate number of cells with data in column B
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+            
+            'calculate next blank row in Custodian Data Sheet
+            LR = CustodianData.Cells(CustodianData.Rows.Count, "J").End(xlUp).Row + 1
+            
+            'copy data
+                'entity name
+                Call CopyValues(.Range("C2:C" & LastRow), CustodianData.Range("I" & LR))
+                'custodian code, security name
+                Application.Union(.Range("B2:B" & LastRow), .Range("G2:G" & LastRow)).Copy
+                CustodianData.Range("J" & LR).PasteSpecial Paste:=xlPasteValues
+                'ISIN, quantity, local MV, local ccy, base MV
+                Application.Union(.Range("D2:D" & LastRow), .Range("BB2:BB" & LastRow), .Range("BD2:BF" & LastRow)).Copy
+                CustodianData.Range("M" & LR).PasteSpecial Paste:=xlPasteValues
+                
+         End With
+         
+        'close the file and don't save changes
+        wb.Close SaveChanges:=False
+        
+        '10 Import BNP cash balances
+        ElseIf myFile = "Duemme Cash.xls" Or myFile = "Anima Cash.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+
+            'clean up data
+            .Rows("1:6").Delete Shift:=xlUp                                                 'delete unused rows at the top of the spreadsheet
+            .Shapes.Range(Array("Picture -767")).Delete                                     'delete picture inserted in the spreadsheet
+            .Rows("2").Delete Shift:=xlUp                                                   'delete row 2
+            .Columns("A:Q").UnMerge                                                         'unmerge cells
+            .Range("B:B,D:D,E:E,G:G,H:H,I:I,K:K,M:M,P:P,Q:Q").Delete Shift:=xlToLeft        'delete blank columns
+            .Columns("C").SpecialCells(xlBlanks).EntireRow.Delete                           'delete any rows if column C is empty
+        
+            'calculate number of used rows
+            LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+         
+            'If workbook name is Duemme cash then ....
+            If myFile = "Duemme Cash.xls" Then
+            
+                For n = 2 To LastRow
+                    'import local cash balances based on currency and insert the balances in the duemme row in relevant columns
+                    If .Range("F" & n).Value = "EUR" Then
+                        Cash_Reconciliation.Range("J6").Value = .Range("E" & n).Value
+                    ElseIf .Range("F" & n).Value = "GBP" Then
+                        Cash_Reconciliation.Range("K6").Value = .Range("E" & n).Value
+                    ElseIf .Range("F" & n).Value = "USD" Then
+                        Cash_Reconciliation.Range("L6").Value = .Range("E" & n).Value
+                    ElseIf .Range("F" & n).Value = "JPY" Then
+                        Cash_Reconciliation.Range("M6").Value = .Range("E" & n).Value
+                    Else
+                    End If
+                Next n
+            
+                'get the cash total in base currency
+                Cash_Reconciliation.Range("Z6").Value = Application.Sum(.Range("G2:G" & LastRow))
+                
+            'close the workbook
+            wb.Close SaveChanges:=False
+            
+            'else if workbook name is Anima cash then ....
+            ElseIf myFile = "Anima Cash.xls" Then
+        
+                 For n = 2 To LastRow
+                    'import local cash balances based on currency and insert the balances in the anima row in relevant columns
+                    If .Range("F" & n).Value = "EUR" Then
+                        Cash_Reconciliation.Range("J5").Value = .Range("E" & n).Value
+                    ElseIf .Range("F" & n).Value = "GBP" Then
+                        Cash_Reconciliation.Range("K5").Value = .Range("E" & n).Value
+                    ElseIf .Range("F" & n).Value = "USD" Then
+                        Cash_Reconciliation.Range("L5").Value = .Range("E" & n).Value
+                    ElseIf .Range("F" & n).Value = "JPY" Then
+                        Cash_Reconciliation.Range("M5").Value = .Range("E" & n).Value
+                    Else
+                    End If
+                Next n
+                
+                'get the cash total in base currency
+                Cash_Reconciliation.Range("Z5").Value = Application.Sum(.Range("G2:G" & LastRow))
+                
+            'close the workbook
+            wb.Close SaveChanges:=False
+            Else
+            
+            End If
+    
+
+    
+        End With
+    
+        '11 Import Caceis Cash data
+        ElseIf myFile = "Caceis Cash.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+        
+        'calculate number of rows used
+        LastRow = .Cells(.Rows.Count, "B").End(xlUp).Row
+
+            For n = 2 To LastRow
+                'Insert BBH code in column J
+                If InStr(UCase(.Range("C" & n).Text), "IBM") <> 0 Then
+                    .Range("J" & n) = "RM20"
+                ElseIf InStr(UCase(.Range("C" & n).Text), "EPARINTER") <> 0 Then
+                    .Range("J" & n) = "EPR1"
+                ElseIf InStr(UCase(.Range("C" & n).Text), "CDN") <> 0 Then
+                    .Range("J" & n) = "RM46"
+                ElseIf InStr(UCase(.Range("C" & n).Text), "HAMELIN") <> 0 Then
+                    .Range("J" & n) = "MDC1"
+                End If
+                
+                'Concatenate BBH # and currency code
+                .Range("K" & n) = .Range("J" & n) & .Range("G" & n)
+            Next n
+
+        End With
+
+        With Cash_Reconciliation
+    
+        'calculate number of rows used
+        LR = .Cells(.Rows.Count, "B").End(xlUp).Row
+
+            For r = 5 To LR
+            'check if BBH account is a match
+                If Not IsError(Application.match(.Range("B" & r), wb.Worksheets(1).Range("J2:J" & LastRow), 0)) Then
+        
+                'import local cash balances based on currency by doing a v-lookup to retrieve values
+                    'eur values
+                    .Range("J" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("F2:F" & LastRow), Application.match(.Range("B" & r) & .Range("J4"), wb.Worksheets(1).Range("K2:K" & LastRow), 0), 1), 0)
+                    'gbp values
+                    .Range("K" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("F2:F" & LastRow), Application.match(.Range("B" & r) & .Range("K4"), wb.Worksheets(1).Range("K2:K" & LastRow), 0), 1), 0)
+                    'usd values
+                    .Range("L" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("F2:F" & LastRow), Application.match(.Range("B" & r) & .Range("L4"), wb.Worksheets(1).Range("K2:K" & LastRow), 0), 1), 0)
+                    'jpy values
+                    .Range("M" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("F2:F" & LastRow), Application.match(.Range("B" & r) & .Range("M4"), wb.Worksheets(1).Range("K2:K" & LastRow), 0), 1), 0)
+        
+                    'cash value in base currency (sum of all cash values in base currency)
+                   .Range("Z" & r).Value = Application.SumIf(wb.Worksheets(1).Range("J2:J" & LastRow), .Range("B" & r), wb.Worksheets(1).Range("H2:H" & LastRow))
+        
+                Else
+        
+                End If
+        
+            Next r
+        
+        End With
+
+        'close the data spreadsheet
+        wb.Close SaveChanges:=False
+
+        '12 Import State Street Cash balances
+        ElseIf myFile = "Opening Cash Balances.xls" Or myFile = "Opening Cash Balances 2.xls" Then
+        'Set variable equal to opened workbook
+        Set wb = Workbooks.Open(Filename:=myPath & myFile)
+        With wb.Worksheets(1)
+    
+        'calculate number of used rows
+         LastRow = .Cells(.Rows.Count, "A").End(xlUp).Row
+
+             For n = 2 To LastRow
+            'calculate the BBH code
+                .Range("G" & n).Value = WorksheetFunction.IfError(WorksheetFunction.Index(Database.Range("B:B"), Application.match(.Range("A" & n), Database.Range("G:G"), 0), 1), "")
+            'BBH & Currency
+                .Range("H" & n).Value = .Range("G" & n).Value & .Range("D" & n).Value
+            Next n
+            
+        End With
+
+        With Cash_Reconciliation
+        
+            For r = 5 To LR
+                'check if BBH account is a match
+                If Not IsError(Application.match(.Range("B" & r), wb.Worksheets(1).Range("G2:G" & LastRow), 0)) Then
+    
+                'import local cash balances based on currency by doing a v-lookup to retrieve values
+                    'eur values
+                    .Range("J" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("C2:C" & LastRow), Application.match(.Range("B" & r) & .Range("J4"), wb.Worksheets(1).Range("H2:H" & LastRow), 0), 1), 0)
+                    'gbp values
+                    .Range("K" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("C2:C" & LastRow), Application.match(.Range("B" & r) & .Range("K4"), wb.Worksheets(1).Range("H2:H" & LastRow), 0), 1), 0)
+                    'usd values
+                    .Range("L" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("C2:C" & LastRow), Application.match(.Range("B" & r) & .Range("L4"), wb.Worksheets(1).Range("H2:H" & LastRow), 0), 1), 0)
+                    'jpy values
+                    .Range("M" & r) = Application.IfError(Application.Index(wb.Worksheets(1).Range("C2:C" & LastRow), Application.match(.Range("B" & r) & .Range("M4"), wb.Worksheets(1).Range("H2:H" & LastRow), 0), 1), 0)
+                
+                    'cash value in base currency (sum of all cash values in base currency)
+                    Cash_Reconciliation.Range("Z" & r).Value = Application.SumIf(wb.Worksheets(1).Range("G2:G" & LastRow), .Range("B" & r), wb.Worksheets(1).Range("E2:E" & LastRow))
+                Else
+    
+                End If
+    
+            Next r
+    
+        End With
+
+        'close the SS workbook
+        wb.Close SaveChanges:=False
+
+            
+        Else      'else do nothing
+        
+        End If
+        
+'Dir gets the next file in the folder
+myFile = Dir
+
+Loop
+
+'turn back on applications switched off at the beginning
+Call SwitchOn
+
+'Determine how many seconds code took to run
+  SecondsElapsed = Round(Timer - StartTime, 2)
+'Notify user in seconds
+  MsgBox "Import ran successfully in " & SecondsElapsed & " seconds", vbInformation
+
+End Sub
